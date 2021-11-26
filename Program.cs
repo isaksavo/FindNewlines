@@ -1,13 +1,31 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Reflection;
 using System.Text;
 
 namespace FindNewlines
 {
-    class Program
+    static class Program
     {
-        private static string s_baseDir = @"C:\dev\psesdk\src";
-
+        private static string s_baseDir;
+        private static readonly List<string> s_extensions = new List<string>()
+        {
+            ".cs",
+            ".csproj",
+            ".sln",
+            ".xaml",
+            ".xml",
+            ".cpp",
+            ".cxx",
+            ".hpp",
+            ".hxx",
+            ".h",
+            ".htm",
+            ".html",
+            ".rc",
+        };
         private static string GetRelativeFilename(
             string filename)
         {
@@ -18,6 +36,40 @@ namespace FindNewlines
 
         static void Main(string[] args)
         {
+            if (args.Length == 0)
+            {
+                string exe = Path.ChangeExtension(Path.GetFileName(Environment.GetCommandLineArgs()[0]), ".exe");
+                Console.WriteLine("Usage: {0} DIR [extensions]", exe);
+                Console.WriteLine("Extensions can be a list of extensions, separated by space (e.g. .cs .xaml)");
+                Console.WriteLine("If omitted, the following file types checked: {0}", String.Join(" ", s_extensions));
+                Console.WriteLine();
+                Console.WriteLine("Example: - check c# files in the current directory");
+                Console.WriteLine(@"   {0} . .cs", exe);
+                Console.WriteLine();
+                Console.WriteLine(@"Example: - check all default files in c:\dev\src");
+                Console.WriteLine(@"   {0} c:\dev\src", exe);
+                
+                return;
+            }
+
+            s_baseDir = Path.GetFullPath(args[0]);
+            if (args.Length > 1)
+            {
+                s_extensions.Clear();
+                foreach (var ext in args.Skip(1))
+                {
+                    if (!ext.StartsWith('.'))
+                    {
+                        s_extensions.Add("." + ext);
+                    }
+                    else
+                    {
+                        s_extensions.Add(ext);
+                    }
+
+                }
+            }
+            Console.WriteLine("Starting scan on directory {0}", s_baseDir);
             LineEndingType okType = LineEndingType.CRLF;
             int filesFound = ScanDirectory(s_baseDir, okType, 0);
             Console.WriteLine("Number of files with line endings different from {0}: {1}", okType, filesFound);
@@ -33,26 +85,13 @@ namespace FindNewlines
             int numFound = 0;
             foreach (string filename in Directory.EnumerateFiles(dir))
             {
-                switch (Path.GetExtension(filename)?.ToLower())
-                {
-                    case ".cs":
-                    case ".xml":
-                    case ".xaml":
-                    case ".cpp":
-                    case ".cxx":
-                    case ".hpp":
-                    case ".h":
-                    case ".c":
-                    case ".sln":
-                    case ".csproj":
-                    case ".htm":
-                    case ".html":
-                        if (CheckFile(filename, okType))
-                        {
-                            numFound++;
-                        }
-                        break;
+                string ext = Path.GetExtension(filename);
+                if (!s_extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                    continue;
 
+                if (CheckFile(filename, okType))
+                {
+                    numFound++;
                 }
             }
 
@@ -60,10 +99,10 @@ namespace FindNewlines
             {
                 if (ShouldSkipFolder(subdir))
                     continue;
-                
+
                 numFound += ScanDirectory(subdir, okType, depth + 1);
             }
-            
+
             return numFound;
         }
 
@@ -86,7 +125,7 @@ namespace FindNewlines
         }
 
         private static bool CheckFile(
-            string filename, 
+            string filename,
             LineEndingType okType)
         {
             var type = GetLineEndingType(filename);
@@ -127,7 +166,7 @@ namespace FindNewlines
             }
 
             string text = File.ReadAllText(filename);
-            
+
             int lineNo = 0;
             for (int i = 0; i < text.Length; i++)
             {
@@ -138,7 +177,7 @@ namespace FindNewlines
                     return text[i + 1];
                 }
                 char ch = text[i];
-                
+
                 if (ch == '\r' && Peek() == '\n')
                 {
                     if (!TrySetLineEndType(LineEndingType.CRLF))
@@ -168,7 +207,7 @@ namespace FindNewlines
         }
     }
 
-    
+
     internal enum LineEndingType
     {
         Unknown,
